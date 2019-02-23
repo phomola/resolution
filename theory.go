@@ -20,13 +20,13 @@ type Variable struct {
 
 func (v *Variable) String() string {
 	b := v.bottom()
-	if t, ok := b.pointee.(StringConstant); ok {
-		return t.text
+	if t, ok := b.pointee.(*Value); ok {
+		return t.String()
 	}
-	return "?[$" + v.name + "]"
+	return "$" + v.name
 	/*s := "$" + v.name
 	b := v.bottom()
-	if t, ok := b.pointee.(StringConstant); ok {
+	if t, ok := b.pointee.(StringAtom); ok {
 		s += "{=" + t.text + "}"
 	}
 	if v != b {
@@ -59,29 +59,12 @@ func (v *Variable) Unify(t Term, cb func()) {
 	}
 }
 
-type StringConstant struct {
-	text string
-}
-
-func (s StringConstant) String() string { return s.text }
-
-func (t1 StringConstant) Unify(t2 Term, cb func()) {
-	if v, ok := t2.(*Variable); ok {
-		v.Unify(t1, cb)
-	}
-	if t2, ok := t2.(StringConstant); ok {
-		if t1.text == t2.text {
-			cb()
-		}
-	}
-}
-
-type Predicate struct {
+type Value struct {
 	Functor string
 	Args    []Term
 }
 
-func NewPredicate(vars map[string]*Variable, functor string, args ...string) *Predicate {
+func NewValue(vars map[string]*Variable, functor string, args ...string) *Value {
 	terms := make([]Term, len(args))
 	for i, arg := range args {
 		if arg[0] == '$' {
@@ -93,13 +76,13 @@ func NewPredicate(vars map[string]*Variable, functor string, args ...string) *Pr
 			}
 			terms[i] = v
 		} else {
-			terms[i] = StringConstant{arg}
+			terms[i] = &Value{arg, nil}
 		}
 	}
-	return &Predicate{functor, terms}
+	return &Value{functor, terms}
 }
 
-func (p *Predicate) String() string {
+func (p *Value) String() string {
 	s := p.Functor
 	if len(p.Args) > 0 {
 		s += "("
@@ -114,7 +97,7 @@ func (p *Predicate) String() string {
 	return s
 }
 
-func (p1 *Predicate) unify(p2 *Predicate, i int, cb func()) {
+func (p1 *Value) unify(p2 *Value, i int, cb func()) {
 	if i == len(p1.Args) {
 		cb()
 	} else {
@@ -124,19 +107,38 @@ func (p1 *Predicate) unify(p2 *Predicate, i int, cb func()) {
 	}
 }
 
-func (p1 *Predicate) Unify(p2 *Predicate, cb func()) {
-	if len(p1.Args) == len(p2.Args) && p1.Functor == p2.Functor {
-		p1.unify(p2, 0, cb)
+func (p1 *Value) Unify(p2 Term, cb func()) {
+	if v, ok := p2.(*Variable); ok {
+		v.Unify(p1, cb)
+	} else {
+		p2 := p2.(*Value)
+		if len(p1.Args) == len(p2.Args) && p1.Functor == p2.Functor {
+			p1.unify(p2, 0, cb)
+		}
 	}
 }
 
 type Rule struct {
-	Head *Predicate
-	Body []*Predicate
+	Head *Value
+	Body []*Value
 }
 
-func NewRule(head *Predicate, body []*Predicate) *Rule {
+func NewRule(head *Value, body []*Value) *Rule {
 	return &Rule{head, body}
+}
+
+func (r *Rule) String() string {
+	s := r.Head.String()
+	if len(r.Body) > 0 {
+		s += " :- "
+		for i, pred := range r.Body {
+			if i > 0 {
+				s += ", "
+			}
+			s += pred.String()
+		}
+	}
+	return s + "."
 }
 
 type Theory struct {
@@ -147,7 +149,15 @@ func NewTheory(rules ...*Rule) *Theory {
 	return &Theory{rules}
 }
 
-func (th *Theory) backchain(goals []*Predicate, i int, cb func()) {
+func (th *Theory) String() string {
+	s := ""
+	for _, rule := range th.Rules {
+		s += rule.String() + "\n"
+	}
+	return s
+}
+
+func (th *Theory) backchain(goals []*Value, i int, cb func()) {
 	if i == len(goals) {
 		cb()
 	} else {
@@ -157,7 +167,7 @@ func (th *Theory) backchain(goals []*Predicate, i int, cb func()) {
 	}
 }
 
-func (th *Theory) Infer(goal *Predicate, cb func()) {
+func (th *Theory) Infer(goal *Value, cb func()) {
 	for _, rule := range th.Rules {
 		rule.Head.Unify(goal, func() {
 			th.backchain(rule.Body, 0, cb)
