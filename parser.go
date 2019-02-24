@@ -101,6 +101,7 @@ var grammar = lrparser.NewGrammar([]*lrparser.Rule{
 	&lrparser.Rule{"Rule", []string{"Term", "&:", "&-", "Terms", "&."}, func(r []interface{}) interface{} { return &ASTRule{r[0].(ASTTerm), r[3].([]ASTTerm)} }},
 	&lrparser.Rule{"Term", []string{"_ID"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
 	&lrparser.Rule{"Term", []string{"&$", "_ID"}, func(r []interface{}) interface{} { return &ASTVar{r[1].(*lrparser.Token).Form} }},
+	&lrparser.Rule{"Term", []string{"&!"}, func(r []interface{}) interface{} { return &ASTValue{functor: "@cut"} }},
 	&lrparser.Rule{"Term", []string{"_NUM"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
 	&lrparser.Rule{"Term", []string{"_STR"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
 	&lrparser.Rule{"Term", []string{"_ID", "&(", "Terms", "&)"}, func(r []interface{}) interface{} {

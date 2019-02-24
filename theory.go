@@ -141,6 +141,9 @@ func (r *Rule) String() string {
 	return s + "."
 }
 
+type Context struct {
+}
+
 type Theory struct {
 	Rules []*Rule
 }
@@ -157,20 +160,37 @@ func (th *Theory) String() string {
 	return s
 }
 
-func (th *Theory) backchain(goals []*Value, i int, cb func()) {
+func (th *Theory) backchain(goals []*Value, context *Context, i int, cb func() bool) bool {
 	if i == len(goals) {
-		cb()
+		return cb()
 	} else {
-		th.Infer(goals[i], func() {
-			th.backchain(goals, i+1, cb)
-		})
+		goal := goals[i]
+		if goal.Functor == "@cut" && len(goal.Args) == 0 {
+			th.backchain(goals, context, i+1, cb)
+			return false
+		} else {
+			cont2 := true
+			th.Infer(goal, func() bool {
+				cont := th.backchain(goals, context, i+1, cb)
+				if !cont {
+					cont2 = false
+				}
+				return cont
+			})
+			return cont2
+		}
 	}
 }
 
-func (th *Theory) Infer(goal *Value, cb func()) {
+func (th *Theory) Infer(goal *Value, cb func() bool) {
+	context := &Context{}
 	for _, rule := range th.Rules {
+		cont := true
 		rule.Head.Unify(goal, func() {
-			th.backchain(rule.Body, 0, cb)
+			cont = th.backchain(rule.Body, context, 0, cb)
 		})
+		if !cont {
+			break
+		}
 	}
 }
