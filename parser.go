@@ -58,7 +58,7 @@ func (a *ASTVar) Description() string {
 func (a *ASTVar) Sem(vars map[string]*Variable) Term {
 	v, ok := vars[a.name]
 	if !ok {
-		v = &Variable{a.name, nil}
+		v = &Variable{a.name}
 		vars[a.name] = v
 	}
 	return v
