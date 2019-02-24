@@ -5,20 +5,31 @@
 package resolution
 
 import (
-//"fmt"
+	//"fmt"
+	"strings"
 )
 
 type Term interface {
 	CtxString(*Context) string
 	Unify(*Context, Term, func(*Context))
+	Ground(*Context) *Value
 }
 
 type Context struct {
-	vars map[*Variable]Term
+	vars   map[*Variable]Term
+	server *Server
 }
 
 func NewContext() *Context {
-	return &Context{make(map[*Variable]Term)}
+	return &Context{make(map[*Variable]Term), NewServer()}
+}
+
+func (c *Context) Clone() *Context {
+	vars := make(map[*Variable]Term)
+	for v, t := range c.vars {
+		vars[v] = t
+	}
+	return &Context{vars, c.server}
 }
 
 type Variable struct {
@@ -55,6 +66,14 @@ func (v *Variable) CtxString(context *Context) string {
 		s += "{=" + b.String() + "}"
 	}
 	return s*/
+}
+
+func (v *Variable) Ground(context *Context) *Value {
+	p := v.bottom(context).Pointee(context)
+	if v == nil {
+		panic("couldn't ground, variable is free")
+	}
+	return p.(*Value)
 }
 
 func (v *Variable) bottom(context *Context) *Variable {
@@ -140,6 +159,33 @@ func (p1 *Value) Unify(context *Context, p2 Term, cb func(*Context)) {
 	}
 }
 
+func (v *Value) Ground(context *Context) *Value {
+	args := make([]Term, len(v.Args))
+	for i, arg := range v.Args {
+		args[i] = arg.Ground(context)
+	}
+	return &Value{v.Functor, args}
+}
+
+func (v *Value) Signature(context *Context) string {
+	s := make([]string, len(v.Args)+1)
+	s[0] = v.Functor
+	for i, t := range v.Args {
+		switch t := t.(type) {
+		case *Value:
+			s[i+1] = t.CtxString(context)
+		case *Variable:
+			val := t.bottom(context).Pointee(context)
+			if val == nil {
+				s[i+1] = "?"
+			} else {
+				s[i+1] = "@" + val.CtxString(context)
+			}
+		}
+	}
+	return strings.Join(s, ":")
+}
+
 type Rule struct {
 	Head *Value
 	Body []*Value
@@ -179,7 +225,7 @@ func (th *Theory) String() string {
 	return s
 }
 
-func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
+/*func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
 	if i == len(goals) {
 		return cb(context)
 	} else {
@@ -209,6 +255,95 @@ func (th *Theory) Infer(context *Context, goal *Value, cb func(*Context) bool) {
 		})
 		if !cont {
 			break
+		}
+	}
+}*/
+
+type subscriber struct {
+	//context  *Context
+	callback func(Term)
+}
+
+type table struct {
+	terms       []*Value
+	subscribers []subscriber
+}
+
+func (table *table) provide(t Term, context *Context) /*duplicate*/ bool {
+	g := t.Ground(context)
+	for _, t2 := range table.terms {
+		if g.Signature(context) == t2.Signature(context) {
+			return true
+		}
+	}
+	//fmt.Println("tabling:", g.CtxString(context))
+	table.terms = append(table.terms, g)
+	for _, subscriber := range table.subscribers {
+		subscriber.callback(g)
+	}
+	return false
+}
+
+type Server struct {
+	tables map[string]*table
+}
+
+func NewServer() *Server {
+	return &Server{make(map[string]*table)}
+}
+
+func (th *Theory) InferTabled(context *Context, goal *Value, cb func(*Context) bool) {
+	sig := goal.Signature(context)
+	if tbl, ok := context.server.tables[sig]; ok {
+		//fmt.Println("signature found:", sig)
+		for _, t := range tbl.terms {
+			goal.Unify(context, t, func(context *Context) {
+				cb(context)
+			})
+		}
+		context2 := context.Clone()
+		tbl.subscribers = append(tbl.subscribers, subscriber{ /*context,*/ func(t Term) {
+			goal.Unify(context2, t, func(context *Context) {
+				cb(context)
+			})
+		}})
+	} else {
+		//fmt.Println("signature not found:", sig)
+		tbl := &table{}
+		context.server.tables[sig] = tbl
+		for _, rule := range th.Rules {
+			cont := true
+			rule.Head.Unify(context, goal, func(context *Context) {
+				cont = th.backchainTabled(context, rule.Body, 0, func(context *Context) bool {
+					tbl.provide(goal, context)
+					return cb(context)
+				})
+			})
+			if !cont {
+				break
+			}
+		}
+	}
+}
+
+func (th *Theory) backchainTabled(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
+	if i == len(goals) {
+		return cb(context)
+	} else {
+		goal := goals[i]
+		if goal.Functor == "@cut" && len(goal.Args) == 0 {
+			th.backchainTabled(context, goals, i+1, cb)
+			return false
+		} else {
+			cont2 := true
+			th.InferTabled(context, goal, func(context *Context) bool {
+				cont := th.backchainTabled(context, goals, i+1, cb)
+				if !cont {
+					cont2 = false
+				}
+				return cont
+			})
+			return cont2
 		}
 	}
 }
