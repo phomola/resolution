@@ -39,7 +39,7 @@ func (a *ASTRule) Sem() *Rule {
 	for _, t := range a.body {
 		body = append(body, t.Sem(vars).(*Value))
 	}
-	return &Rule{head, body}
+	return &Rule{head, body, 0}
 }
 
 type ASTTerm interface {

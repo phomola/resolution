@@ -138,6 +138,23 @@ func (p *Value) CtxString(context *Context) string {
 	return s
 }
 
+func (p *Value) InstantiateVariables(vars map[string]*Variable) *Value {
+	var args []Term
+	for _, arg := range p.Args {
+		if v, ok := arg.(*Variable); ok {
+			v2 := vars[v.name]
+			if v2 == nil {
+				v2 = &Variable{v.name}
+				vars[v.name] = v2
+			}
+			args = append(args, v2)
+		} else {
+			args = append(args, arg.(*Value).InstantiateVariables(vars))
+		}
+	}
+	return &Value{p.Functor, args}
+}
+
 func (p1 *Value) unify(context *Context, p2 *Value, i int, cb func(*Context)) {
 	if i == len(p1.Args) {
 		cb(context)
@@ -153,6 +170,7 @@ func (p1 *Value) Unify(context *Context, p2 Term, cb func(*Context)) {
 		v.Unify(context, p1, cb)
 	} else {
 		p2 := p2.(*Value)
+		//fmt.Println("?",p1.CtxString(context),"==",p2.CtxString(context))
 		if len(p1.Args) == len(p2.Args) && p1.Functor == p2.Functor {
 			p1.unify(context, p2, 0, cb)
 		}
@@ -189,10 +207,11 @@ func (v *Value) Signature(context *Context) string {
 type Rule struct {
 	Head *Value
 	Body []*Value
+	use  int
 }
 
 func NewRule(head *Value, body []*Value) *Rule {
-	return &Rule{head, body}
+	return &Rule{head, body, 0}
 }
 
 func (r *Rule) String() string {
@@ -207,6 +226,24 @@ func (r *Rule) String() string {
 		}
 	}
 	return s + "."
+}
+
+func (r *Rule) AddUse() { r.use++ }
+
+func (r *Rule) RelinquishUse() { r.use-- }
+
+func (r *Rule) InstantiateVariables() (*Value, []*Value) {
+	if r.use > 0 {
+		vars := make(map[string]*Variable)
+		head := r.Head.InstantiateVariables(vars)
+		var body []*Value
+		for _, goal := range r.Body {
+			body = append(body, goal.InstantiateVariables(vars))
+		}
+		return head, body
+	} else {
+		return r.Head, r.Body
+	}
 }
 
 type Theory struct {
@@ -225,7 +262,11 @@ func (th *Theory) String() string {
 	return s
 }
 
-/*func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
+func (th *Theory) AddRules(rules []*Rule) {
+	th.Rules = append(th.Rules, rules...)
+}
+
+func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
 	if i == len(goals) {
 		return cb(context)
 	} else {
@@ -248,16 +289,21 @@ func (th *Theory) String() string {
 }
 
 func (th *Theory) Infer(context *Context, goal *Value, cb func(*Context) bool) {
+	//fmt.Println("inferring:",goal.CtxString(context))
 	for _, rule := range th.Rules {
+		head, body := rule.InstantiateVariables()
+		rule.AddUse()
 		cont := true
-		rule.Head.Unify(context, goal, func(context *Context) {
-			cont = th.backchain(context, rule.Body, 0, cb)
+		head.Unify(context, goal, func(context *Context) {
+			//fmt.Println("->",goal.CtxString(context))
+			cont = th.backchain(context, body, 0, cb)
 		})
+		rule.RelinquishUse()
 		if !cont {
 			break
 		}
 	}
-}*/
+}
 
 type subscriber struct {
 	//context  *Context
@@ -312,13 +358,16 @@ func (th *Theory) InferTabled(context *Context, goal *Value, cb func(*Context) b
 		tbl := &table{}
 		context.server.tables[sig] = tbl
 		for _, rule := range th.Rules {
+			head, body := rule.InstantiateVariables()
+			rule.AddUse()
 			cont := true
-			rule.Head.Unify(context, goal, func(context *Context) {
-				cont = th.backchainTabled(context, rule.Body, 0, func(context *Context) bool {
+			head.Unify(context, goal, func(context *Context) {
+				cont = th.backchainTabled(context, body, 0, func(context *Context) bool {
 					tbl.provide(goal, context)
 					return cb(context)
 				})
 			})
+			rule.RelinquishUse()
 			if !cont {
 				break
 			}
