@@ -276,6 +276,28 @@ func (th *Theory) String() string {
 	return s
 }
 
+type Snapshot struct {
+	lengths map[Signature]int
+}
+
+func (th *Theory) Snapshot() *Snapshot {
+	ss := &Snapshot{make(map[Signature]int)}
+	for sig, rules := range th.Rules {
+		ss.lengths[sig] = len(rules)
+	}
+	return ss
+}
+
+func (th *Theory) Rollback(ss *Snapshot) {
+	for sig, rules := range th.Rules {
+		if len, ok := ss.lengths[sig]; ok {
+			th.Rules[sig] = rules[:len]
+		} else {
+			th.Rules[sig] = []*Rule{}
+		}
+	}
+}
+
 func (th *Theory) AddRules(rules []*Rule) {
 	for _, rule := range rules {
 		th.AddRule(rule)

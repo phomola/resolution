@@ -6,6 +6,7 @@ package resolution
 
 import (
 	"fmt"
+
 	"github.com/phomola/resolution/lrparser"
 )
 
@@ -110,6 +111,22 @@ var grammar = lrparser.NewGrammar([]*lrparser.Rule{
 	&lrparser.Rule{"Terms", []string{"Terms", "&,", "Term"}, func(r []interface{}) interface{} { return append(r[0].([]ASTTerm), r[2].(ASTTerm)) }},
 	&lrparser.Rule{"Terms", []string{"Term"}, func(r []interface{}) interface{} { return []ASTTerm{r[0].(ASTTerm)} }},
 })
+
+func (th *Theory) AddRulesFromSource(code string) error {
+	tokens := lrparser.Tokenize(code, "#")
+	ast, err := grammar.Parse(tokens)
+	if err == nil {
+		var rules []*Rule
+		for _, stmt := range ast.([]AST) {
+			rule := stmt.(*ASTRule).Sem()
+			rules = append(rules, rule)
+		}
+		th.AddRules(rules)
+		return nil
+	} else {
+		return fmt.Errorf("parse error: %s", err.Error())
+	}
+}
 
 func NewTheoryFromSource(code string) (*Theory, error) {
 	tokens := lrparser.Tokenize(code, "#")
