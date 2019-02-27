@@ -120,7 +120,7 @@ func NewTheoryFromSource(code string) (*Theory, error) {
 			rule := stmt.(*ASTRule).Sem()
 			rules = append(rules, rule)
 		}
-		return &Theory{rules}, nil
+		return NewTheory(rules), nil
 	} else {
 		return nil, fmt.Errorf("parse error: %s", err.Error())
 	}

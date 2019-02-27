@@ -185,7 +185,11 @@ func (v *Value) Ground(context *Context) *Value {
 	return &Value{v.Functor, args}
 }
 
-func (v *Value) Signature(context *Context) string {
+func (v *Value) Signature() Signature {
+	return Signature{v.Functor, len(v.Args)}
+}
+
+func (v *Value) TableSignature(context *Context) string {
 	s := make([]string, len(v.Args)+1)
 	s[0] = v.Functor
 	for i, t := range v.Args {
@@ -246,24 +250,43 @@ func (r *Rule) InstantiateVariables() (*Value, []*Value) {
 	}
 }
 
-type Theory struct {
-	Rules []*Rule
+type Signature struct {
+	Functor string
+	Arity   int
 }
 
-func NewTheory(rules ...*Rule) *Theory {
-	return &Theory{rules}
+type Theory struct {
+	//Rules []*Rule
+	Rules map[Signature][]*Rule
+}
+
+func NewTheory(rules []*Rule) *Theory {
+	th := &Theory{make(map[Signature][]*Rule)}
+	th.AddRules(rules)
+	return th
 }
 
 func (th *Theory) String() string {
 	s := ""
-	for _, rule := range th.Rules {
-		s += rule.String() + "\n"
+	for _, rules := range th.Rules {
+		for _, rule := range rules {
+			s += rule.String() + "\n"
+		}
 	}
 	return s
 }
 
 func (th *Theory) AddRules(rules []*Rule) {
-	th.Rules = append(th.Rules, rules...)
+	for _, rule := range rules {
+		th.AddRule(rule)
+	}
+}
+
+func (th *Theory) AddRule(rule *Rule) {
+	sig := rule.Head.Signature()
+	list := th.Rules[sig]
+	list = append(list, rule)
+	th.Rules[sig] = list
 }
 
 func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Context) bool) bool {
@@ -290,17 +313,19 @@ func (th *Theory) backchain(context *Context, goals []*Value, i int, cb func(*Co
 
 func (th *Theory) Infer(context *Context, goal *Value, cb func(*Context) bool) {
 	//fmt.Println("inferring:",goal.CtxString(context))
-	for _, rule := range th.Rules {
-		head, body := rule.InstantiateVariables()
-		rule.AddUse()
-		cont := true
-		head.Unify(context, goal, func(context *Context) {
-			//fmt.Println("->",goal.CtxString(context))
-			cont = th.backchain(context, body, 0, cb)
-		})
-		rule.RelinquishUse()
-		if !cont {
-			break
+	if rules, ok := th.Rules[goal.Signature()]; ok {
+		for _, rule := range rules {
+			head, body := rule.InstantiateVariables()
+			rule.AddUse()
+			cont := true
+			head.Unify(context, goal, func(context *Context) {
+				//fmt.Println("->",goal.CtxString(context))
+				cont = th.backchain(context, body, 0, cb)
+			})
+			rule.RelinquishUse()
+			if !cont {
+				break
+			}
 		}
 	}
 }
@@ -318,7 +343,7 @@ type table struct {
 func (table *table) provide(t Term, context *Context) /*duplicate*/ bool {
 	g := t.Ground(context)
 	for _, t2 := range table.terms {
-		if g.Signature(context) == t2.Signature(context) {
+		if g.TableSignature(context) == t2.TableSignature(context) {
 			return true
 		}
 	}
@@ -339,7 +364,7 @@ func NewServer() *Server {
 }
 
 func (th *Theory) InferTabled(context *Context, goal *Value, cb func(*Context) bool) {
-	sig := goal.Signature(context)
+	sig := goal.TableSignature(context)
 	if tbl, ok := context.server.tables[sig]; ok {
 		//fmt.Println("signature found:", sig)
 		for _, t := range tbl.terms {
@@ -357,19 +382,21 @@ func (th *Theory) InferTabled(context *Context, goal *Value, cb func(*Context) b
 		//fmt.Println("signature not found:", sig)
 		tbl := &table{}
 		context.server.tables[sig] = tbl
-		for _, rule := range th.Rules {
-			head, body := rule.InstantiateVariables()
-			rule.AddUse()
-			cont := true
-			head.Unify(context, goal, func(context *Context) {
-				cont = th.backchainTabled(context, body, 0, func(context *Context) bool {
-					tbl.provide(goal, context)
-					return cb(context)
+		if rules, ok := th.Rules[goal.Signature()]; ok {
+			for _, rule := range rules {
+				head, body := rule.InstantiateVariables()
+				rule.AddUse()
+				cont := true
+				head.Unify(context, goal, func(context *Context) {
+					cont = th.backchainTabled(context, body, 0, func(context *Context) bool {
+						tbl.provide(goal, context)
+						return cb(context)
+					})
 				})
-			})
-			rule.RelinquishUse()
-			if !cont {
-				break
+				rule.RelinquishUse()
+				if !cont {
+					break
+				}
 			}
 		}
 	}
