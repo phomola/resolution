@@ -6,7 +6,7 @@ package lrparser
 
 import (
 	"fmt"
-  "sort"
+	"sort"
 	"strings"
 )
 
@@ -351,7 +351,7 @@ func (gr *Grammar) Parse(tokens []*Token) (interface{}, error) {
 		case *reduceAction:
 			rule := gr.Rules[action.rule]
 			results := resultStack[len(resultStack)-len(rule.Rhs):]
-			resultStack = resultStack[:len(resultStack)-len(rule.Rhs) : len(resultStack)-len(rule.Rhs)]
+			resultStack = resultStack[: len(resultStack)-len(rule.Rhs) : len(resultStack)-len(rule.Rhs)]
 			stateStack = stateStack[:len(stateStack)-len(rule.Rhs)]
 			resultStack = append(resultStack, rule.Conv(results))
 			if nextState, ok := gr.gotoTable[tableKey{stateStack[len(stateStack)-1], rule.Lhs}]; ok {
@@ -367,10 +367,33 @@ func (gr *Grammar) Parse(tokens []*Token) (interface{}, error) {
 			var expected []string
 			for terminal, _ := range terminals {
 				if _, ok := gr.actionTable[tableKey{currentState, terminal}]; ok {
+					symbol := terminal
+					if terminal[0] == '&' {
+						symbol = "'" + terminal[1:] + "'"
+					}
+					if terminal == "_ID" {
+						symbol = "identifier"
+					}
+					if terminal == "_STR" {
+						symbol = "string"
+					}
+					if terminal == "_NUM" {
+						symbol = "number"
+					}
+					expected = append(expected, symbol)
+				}
+			}
+			if len(expected) > 1 {
+				return nil, fmt.Errorf("expected one of %s at line %d", strings.Join(expected, ", "), token.Line)
+			} else {
+				return nil, fmt.Errorf("expected '%s' at line %d", expected[0], token.Line)
+			}
+			/*for terminal, _ := range terminals {
+				if _, ok := gr.actionTable[tableKey{currentState, terminal}]; ok {
 					expected = append(expected, terminal)
 				}
 			}
-			return nil, fmt.Errorf("expected '%s' at line %d", strings.Join(expected, "|"), token.Line)
+			return nil, fmt.Errorf("expected '%s' at line %d", strings.Join(expected, "|"), token.Line)*/
 		}
 	}
 }

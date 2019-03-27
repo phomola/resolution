@@ -6,7 +6,6 @@ package resolution
 
 import (
 	"fmt"
-
 	"github.com/phomola/resolution/lrparser"
 )
 
