@@ -6,7 +6,9 @@ package resolution
 
 import (
 	"fmt"
-	"github.com/phomola/resolution/lrparser"
+
+	"github.com/phomola/lrparser"
+	"github.com/phomola/textkit"
 )
 
 type AST interface {
@@ -99,20 +101,21 @@ var grammar = lrparser.NewGrammar([]*lrparser.Rule{
 	&lrparser.Rule{"Stmt", []string{"Rule"}, func(r []interface{}) interface{} { return r[0] }},
 	&lrparser.Rule{"Rule", []string{"Term", "&."}, func(r []interface{}) interface{} { return &ASTRule{head: r[0].(ASTTerm)} }},
 	&lrparser.Rule{"Rule", []string{"Term", "&:", "&-", "Terms", "&."}, func(r []interface{}) interface{} { return &ASTRule{r[0].(ASTTerm), r[3].([]ASTTerm)} }},
-	&lrparser.Rule{"Term", []string{"_ID"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
-	&lrparser.Rule{"Term", []string{"&$", "_ID"}, func(r []interface{}) interface{} { return &ASTVar{r[1].(*lrparser.Token).Form} }},
+	&lrparser.Rule{"Term", []string{"_ID"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*textkit.Token).Form} }},
+	&lrparser.Rule{"Term", []string{"&$", "_ID"}, func(r []interface{}) interface{} { return &ASTVar{r[1].(*textkit.Token).Form} }},
 	&lrparser.Rule{"Term", []string{"&!"}, func(r []interface{}) interface{} { return &ASTValue{functor: "@cut"} }},
-	&lrparser.Rule{"Term", []string{"_NUM"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
-	&lrparser.Rule{"Term", []string{"_STR"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*lrparser.Token).Form} }},
+	&lrparser.Rule{"Term", []string{"_NUM"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*textkit.Token).Form} }},
+	&lrparser.Rule{"Term", []string{"_STR"}, func(r []interface{}) interface{} { return &ASTValue{functor: r[0].(*textkit.Token).Form} }},
 	&lrparser.Rule{"Term", []string{"_ID", "&(", "Terms", "&)"}, func(r []interface{}) interface{} {
-		return &ASTValue{r[0].(*lrparser.Token).Form, r[2].([]ASTTerm)}
+		return &ASTValue{r[0].(*textkit.Token).Form, r[2].([]ASTTerm)}
 	}},
 	&lrparser.Rule{"Terms", []string{"Terms", "&,", "Term"}, func(r []interface{}) interface{} { return append(r[0].([]ASTTerm), r[2].(ASTTerm)) }},
 	&lrparser.Rule{"Terms", []string{"Term"}, func(r []interface{}) interface{} { return []ASTTerm{r[0].(ASTTerm)} }},
 })
 
 func (th *Theory) AddRulesFromSource(code string) error {
-	tokens := lrparser.Tokenize(code, "#")
+	tok := textkit.Tokeniser{"#", '"'}
+	tokens := tok.Tokenise(code)
 	ast, err := grammar.Parse(tokens)
 	if err == nil {
 		var rules []*Rule
@@ -128,7 +131,8 @@ func (th *Theory) AddRulesFromSource(code string) error {
 }
 
 func NewTheoryFromSource(code string) (*Theory, error) {
-	tokens := lrparser.Tokenize(code, "#")
+	tok := textkit.Tokeniser{"#", '"'}
+	tokens := tok.Tokenise(code)
 	ast, err := grammar.Parse(tokens)
 	if err == nil {
 		var rules []*Rule
