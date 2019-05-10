@@ -114,7 +114,7 @@ var grammar = lrparser.NewGrammar([]*lrparser.Rule{
 })
 
 func (th *Theory) AddRulesFromSource(code string) error {
-	tok := textkit.Tokeniser{"#", '"'}
+	tok := textkit.Tokeniser{CommentPrefix: "#", StringChar: '"'}
 	tokens := tok.Tokenise(code)
 	ast, err := grammar.Parse(tokens)
 	if err == nil {
@@ -131,7 +131,7 @@ func (th *Theory) AddRulesFromSource(code string) error {
 }
 
 func NewTheoryFromSource(code string) (*Theory, error) {
-	tok := textkit.Tokeniser{"#", '"'}
+	tok := textkit.Tokeniser{CommentPrefix: "#", StringChar: '"'}
 	tokens := tok.Tokenise(code)
 	ast, err := grammar.Parse(tokens)
 	if err == nil {
