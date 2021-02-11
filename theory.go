@@ -1,7 +1,8 @@
-// Copyright 2019 Petr Homola. All rights reserved.
+// Copyright 2019-2020 Petr Homola. All rights reserved.
 // Use of this source code is governed by the AGPL v3.0
 // that can be found in the LICENSE file.
 
+// This package implements the SLG resolution.
 package resolution
 
 import (
@@ -165,6 +166,7 @@ func (p1 *Value) unify(context *Context, p2 *Value, i int, cb func(*Context)) {
 	}
 }
 
+// Unifies two terms using the provided context.
 func (p1 *Value) Unify(context *Context, p2 Term, cb func(*Context)) {
 	if v, ok := p2.(*Variable); ok {
 		v.Unify(context, p1, cb)

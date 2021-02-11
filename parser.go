@@ -1,4 +1,4 @@
-// Copyright 2019 Petr Homola. All rights reserved.
+// Copyright 2019-2020 Petr Homola. All rights reserved.
 // Use of this source code is governed by the AGPL v3.0
 // that can be found in the LICENSE file.
 
@@ -11,15 +11,18 @@ import (
 	"github.com/phomola/textkit"
 )
 
+// An abstract AST.
 type AST interface {
 	Description() string
 }
 
+// A syntactic rule.
 type ASTRule struct {
 	head ASTTerm
 	body []ASTTerm
 }
 
+// A textual representation of the rule.
 func (a *ASTRule) Description() string {
 	s := a.head.Description()
 	if len(a.body) > 0 {
@@ -113,6 +116,7 @@ var grammar = lrparser.NewGrammar([]*lrparser.Rule{
 	&lrparser.Rule{"Terms", []string{"Term"}, func(r []interface{}) interface{} { return []ASTTerm{r[0].(ASTTerm)} }},
 })
 
+// Adds rules from the provided source code.
 func (th *Theory) AddRulesFromSource(code string) error {
 	tok := textkit.Tokeniser{CommentPrefix: "#", StringChar: '"'}
 	tokens := tok.Tokenise(code)
@@ -130,6 +134,7 @@ func (th *Theory) AddRulesFromSource(code string) error {
 	}
 }
 
+// Creates a new theory from the provided source code.
 func NewTheoryFromSource(code string) (*Theory, error) {
 	tok := textkit.Tokeniser{CommentPrefix: "#", StringChar: '"'}
 	tokens := tok.Tokenise(code)
